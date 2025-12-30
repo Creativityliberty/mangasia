@@ -4,7 +4,7 @@ export interface Character {
     name: string;
     role: string;
     traits: string;
-    appearance: string; // Crucial for AI image consistency
+    appearance: string;
 }
 
 export interface Bubble {
@@ -17,35 +17,43 @@ export interface Bubble {
 
 export interface Panel {
     id: string;
-    description: string; // The prompt for the AI
+    description: string; // The prompt
     imageUrl?: string;
     bubbles: Bubble[];
-    order: number;
 }
 
 export interface Page {
     id: string;
     panels: Panel[];
-    inkMode: 'monochrome' | 'color';
 }
 
 export interface ScenarioData {
     title: string;
-    chapterNumber: number;
-    previousSynopsis: string;
-
-    // The 11 Waypoints (Ingredients)
-    charactersText: string;    // Step 1: Characters (JSON stringified or raw text)
-    theme: string;             // Step 2
-    tone: string;              // Step 3
-    universe: string;          // Step 4
-    ideas: string;             // Step 5
-    generalPlan: string;       // Step 6
-    keyEvents: string;         // Step 7
-    detailedPlot: string;      // Step 8
-    dialogues: string;         // Step 9
-    script: string;            // Step 10: The final script derived from previous steps
-    coverDescription: string;  // Step 11
+    chapterNumber: number; // NEW: Track episode number
+    previousSynopsis: string; // NEW: Memory of previous episodes
+    // Step 1
+    charactersText: string;
+    // Step 2
+    theme: string;
+    // Step 3
+    tone: string;
+    colorMode: 'bw' | 'color';
+    // Step 4
+    universe: string;
+    // Step 5
+    ideas: string;
+    // Step 6
+    generalPlan: string;
+    // Step 7
+    keyEvents: string;
+    // Step 8
+    detailedPlot: string;
+    // Step 9
+    dialogues: string;
+    // Step 10
+    script: string;
+    // Step 11
+    coverDescription: string;
 }
 
 export interface Project {
@@ -53,7 +61,6 @@ export interface Project {
     scenario: ScenarioData;
     pages: Page[];
     updatedAt: number;
-    currentStep: string; // 'universe', 'characters', etc.
 }
 
 export interface ChatMessage {
@@ -62,6 +69,8 @@ export interface ChatMessage {
     text: string;
     isThinking?: boolean;
 }
+
+export type ViewState = 'dashboard' | 'scenario' | 'storyboard' | 'editor';
 
 export const STEPS = [
     { id: 'characters', label: '1. Personnages' },

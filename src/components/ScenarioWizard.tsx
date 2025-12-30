@@ -1,174 +1,220 @@
 
-"use client";
-
-import React, { useState } from 'react';
-import { Project, STEPS } from '@/types';
-import { ChevronRight, ChevronLeft, Sparkles, BookOpen } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Project, STEPS } from '../types';
+import { ChevronRight, Loader2, ImagePlus } from 'lucide-react';
 import AiChat from './AiChat';
-import Checklist from './Checklist';
-import { motion } from "framer-motion";
+import { analyzeCharacterReference } from '../services/gemini.service';
 
 interface Props {
     project: Project;
     onUpdate: (project: Project) => void;
-    onNext: () => void; // Proceed to Visual Board
+    onNext: () => void;
 }
 
-export default function ScenarioWizard({ project, onUpdate, onNext }: Props) {
-    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-    const [showChecklist, setShowChecklist] = useState(false);
+const ScenarioWizard: React.FC<Props> = ({ project, onUpdate, onNext }) => {
+    const [activeStep, setActiveStep] = useState(0);
+    const [analyzingImage, setAnalyzingImage] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const currentStep = STEPS[currentStepIndex];
+    const currentStepId = STEPS[activeStep].id;
 
-    // Helper to get/set value based on current step
-    const getCurrentValue = () => {
+    const getStepContent = () => {
         const s = project.scenario;
-        const keyMap: Record<string, string> = {
-            'characters': s.charactersText,
-            'theme': s.theme,
-            'tone': s.tone,
-            'universe': s.universe,
-            'ideas': s.ideas,
-            'plan': s.generalPlan,
-            'beats': s.keyEvents,
-            'development': s.detailedPlot,
-            'dialogue': s.dialogues,
-            'storyboard': s.script,
-            'cover': s.coverDescription
-        };
-        return keyMap[currentStep.id] || "";
-    };
-
-    const updateCurrentValue = (val: string) => {
-        const s = { ...project.scenario };
-        const keyMap: Record<string, any> = {
-            'characters': 'charactersText',
-            'theme': 'theme',
-            'tone': 'tone',
-            'universe': 'universe',
-            'ideas': 'ideas',
-            'plan': 'generalPlan',
-            'beats': 'keyEvents',
-            'development': 'detailedPlot',
-            'dialogue': 'dialogues',
-            'storyboard': 'script',
-            'cover': 'coverDescription'
-        };
-        const key = keyMap[currentStep.id];
-        if (key) {
-            // @ts-ignore
-            s[key] = val;
-            onUpdate({ ...project, scenario: s, updatedAt: Date.now() });
+        switch (currentStepId) {
+            case 'characters': return s.charactersText;
+            case 'theme': return s.theme;
+            case 'tone': return s.tone;
+            case 'universe': return s.universe;
+            case 'ideas': return s.ideas;
+            case 'plan': return s.generalPlan;
+            case 'beats': return s.keyEvents;
+            case 'development': return s.detailedPlot;
+            case 'dialogue': return s.dialogues;
+            case 'storyboard': return s.script;
+            case 'cover': return s.coverDescription;
+            default: return '';
         }
     };
 
-    const handleNext = () => {
-        if (currentStepIndex < STEPS.length - 1) {
-            setCurrentStepIndex(prev => prev + 1);
+    const handleInputChange = (value: string) => {
+        const newScenario = { ...project.scenario };
+
+        switch (currentStepId) {
+            case 'characters': newScenario.charactersText = value; break;
+            case 'theme': newScenario.theme = value; break;
+            case 'tone': newScenario.tone = value; break;
+            case 'universe': newScenario.universe = value; break;
+            case 'ideas': newScenario.ideas = value; break;
+            case 'plan': newScenario.generalPlan = value; break;
+            case 'beats': newScenario.keyEvents = value; break;
+            case 'development': newScenario.detailedPlot = value; break;
+            case 'dialogue': newScenario.dialogues = value; break;
+            case 'storyboard': newScenario.script = value; break;
+            case 'cover': newScenario.coverDescription = value; break;
+        }
+
+        onUpdate({ ...project, scenario: newScenario });
+    };
+
+    const handleAiApply = (text: string) => {
+        const current = getStepContent();
+        if (!current) {
+            handleInputChange(text);
         } else {
-            onNext(); // All steps done
+            handleInputChange(current + '\n\n' + text);
         }
     };
 
-    const handlePrev = () => {
-        if (currentStepIndex > 0) {
-            setCurrentStepIndex(prev => prev - 1);
-        }
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+        const file = e.target.files[0];
+
+        setAnalyzingImage(true);
+
+        const reader = new FileReader();
+        reader.onload = async () => {
+            if (typeof reader.result === 'string') {
+                const charName = prompt("Character Name for this image?", "Unknown Character");
+                if (charName) {
+                    const description = await analyzeCharacterReference(reader.result, charName);
+                    if (description) {
+                        const appendText = `\n\n[VISUAL REFERENCE FOR ${charName.toUpperCase()}]\n${description}`;
+                        handleAiApply(appendText);
+                    }
+                }
+            }
+            setAnalyzingImage(false);
+        };
+        reader.readAsDataURL(file);
     };
 
     return (
-        <div className="flex h-full gap-6 p-6 max-w-[1600px] mx-auto relative overflow-hidden text-slate-100">
-            {/* Background Elements */}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-indigo-900/10 via-slate-950 to-slate-950 -z-10" />
-
-            {/* Left: Editor */}
-            <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                key={currentStep.id}
-                className="flex-1 flex flex-col gap-4"
-            >
-                <div className="flex items-center justify-between mb-2">
-                    <div>
-                        <h2 className="text-3xl font-black text-white font-comic tracking-wide uppercase">
-                            <span className="text-indigo-500 mr-2 text-4xl">#{currentStepIndex + 1}</span>
-                            {currentStep.label}
-                        </h2>
-                        <p className="text-slate-400 text-sm font-medium mt-1">Define this ingredient to unlock the next chapter.</p>
-                    </div>
-
-                    <div className="flex gap-2">
+        <div className="flex h-full">
+            {/* Sidebar Steps */}
+            <div className="w-64 bg-slate-900 border-r border-slate-800 p-4 overflow-y-auto hidden md:block">
+                <h2 className="text-xl font-bold mb-6 text-indigo-400 font-comic tracking-wider">SCENARIO STUDIO</h2>
+                <div className="space-y-2">
+                    {STEPS.map((step, index) => (
                         <button
-                            onClick={() => setShowChecklist(true)}
-                            className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors border border-slate-700 text-slate-300"
-                            title="Open Mission Log"
+                            key={step.id}
+                            onClick={() => setActiveStep(index)}
+                            className={`w-full text-left px-4 py-3 rounded-lg text-sm font-medium transition-all ${activeStep === index
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/50'
+                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                                }`}
                         >
-                            <BookOpen className="w-5 h-5" />
+                            {step.label}
                         </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col bg-slate-950">
+                <div className="p-4 md:p-8 flex-1 overflow-y-hidden flex flex-col">
+                    <header className="mb-6 flex justify-between items-start">
+                        <div>
+                            <h1 className="text-3xl font-bold text-white mb-2">{STEPS[activeStep].label}</h1>
+                            <p className="text-slate-400">Describe this aspect of your manga. Use the AI Co-Pilot to brainstorm.</p>
+                        </div>
+
+                        {/* Step 3: Color Mode Toggle */}
+                        {currentStepId === 'tone' && (
+                            <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-700">
+                                <button
+                                    onClick={() => onUpdate({ ...project, scenario: { ...project.scenario, colorMode: 'bw' } })}
+                                    className={`px-3 py-1 text-xs font-bold rounded ${project.scenario.colorMode !== 'color' ? 'bg-slate-100 text-black' : 'text-slate-400'}`}
+                                >
+                                    B&W (Manga)
+                                </button>
+                                <button
+                                    onClick={() => onUpdate({ ...project, scenario: { ...project.scenario, colorMode: 'color' } })}
+                                    className={`px-3 py-1 text-xs font-bold rounded ${project.scenario.colorMode === 'color' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
+                                >
+                                    Color (Webtoon)
+                                </button>
+                            </div>
+                        )}
+                    </header>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
+                        {/* Input Area */}
+                        <div className="flex flex-col gap-2 h-full">
+                            <label className="text-sm font-semibold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                                <span>Your Draft</span>
+
+                                {/* Step 1: Image Upload */}
+                                {currentStepId === 'characters' && (
+                                    <div>
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleImageUpload}
+                                            accept="image/*"
+                                            className="hidden"
+                                        />
+                                        <button
+                                            onClick={() => fileInputRef.current?.click()}
+                                            disabled={analyzingImage}
+                                            className="flex items-center gap-1 text-xs bg-indigo-900 hover:bg-indigo-800 text-indigo-200 px-2 py-1 rounded border border-indigo-700 transition-colors"
+                                        >
+                                            {analyzingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImagePlus className="w-3 h-3" />}
+                                            Upload Reference
+                                        </button>
+                                    </div>
+                                )}
+                            </label>
+                            <textarea
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-6 text-slate-200 text-lg leading-relaxed focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none shadow-inner font-mono"
+                                placeholder={`Write about the ${STEPS[activeStep].label.toLowerCase()} here...`}
+                                value={getStepContent()}
+                                onChange={(e) => handleInputChange(e.target.value)}
+                            />
+                        </div>
+
+                        {/* AI Chat Builder Area */}
+                        <div className="flex flex-col h-full min-h-[400px]">
+                            <AiChat
+                                stepLabel={STEPS[activeStep].label}
+                                scenarioData={project.scenario}
+                                onApplyContent={handleAiApply}
+                            />
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex-1 relative group min-h-[500px]">
-                    <textarea
-                        className="w-full h-full bg-slate-900/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8 text-lg leading-relaxed text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none shadow-inner transition-all selection:bg-indigo-500/30 font-sans"
-                        placeholder={`Start writing your ${currentStep.label}...`}
-                        value={getCurrentValue()}
-                        onChange={(e) => updateCurrentValue(e.target.value)}
-                    />
-                    <div className="absolute bottom-4 right-4 text-xs text-slate-600 font-mono pointer-events-none">
-                        {getCurrentValue().length} chars
-                    </div>
-                </div>
+                {/* Footer Navigation */}
+                <div className="bg-slate-900 border-t border-slate-800 p-4 flex justify-between items-center px-8 shrink-0">
+                    <span className="text-slate-500 text-sm hidden md:inline">Step {activeStep + 1} of {STEPS.length}</span>
+                    <div className="flex gap-4 w-full md:w-auto justify-end">
+                        <button
+                            onClick={() => setActiveStep(prev => Math.max(0, prev - 1))}
+                            disabled={activeStep === 0}
+                            className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+                        >
+                            Previous
+                        </button>
 
-                <div className="flex justify-between items-center bg-slate-900/80 p-4 rounded-xl border border-slate-800 backdrop-blur-md">
-                    <button
-                        onClick={handlePrev}
-                        disabled={currentStepIndex === 0}
-                        className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-slate-400 hover:text-white disabled:opacity-30 disabled:hover:text-slate-400 transition-colors"
-                    >
-                        <ChevronLeft className="w-4 h-4" /> Previous
-                    </button>
-
-                    <div className="flex gap-2">
-                        {currentStepIndex === STEPS.length - 1 ? (
+                        {activeStep === STEPS.length - 1 ? (
                             <button
-                                onClick={handleNext}
-                                className="flex items-center gap-2 px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-lg shadow-emerald-900/20 transition-all hover:scale-105"
+                                onClick={onNext}
+                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 transition-colors"
                             >
-                                <Sparkles className="w-4 h-4" /> Finish Scenario
+                                Go to Storyboard <ChevronRight className="w-5 h-5" />
                             </button>
                         ) : (
                             <button
-                                onClick={handleNext}
-                                className="flex items-center gap-2 px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-lg shadow-indigo-900/20 transition-all hover:scale-105"
+                                onClick={() => setActiveStep(prev => Math.min(prev + 1, STEPS.length - 1))}
+                                className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
                             >
-                                Next Step <ChevronRight className="w-4 h-4" />
+                                Next Step
                             </button>
                         )}
                     </div>
                 </div>
-            </motion.div>
-
-            {/* Right: AI Assistant */}
-            <div className="w-[400px] flex flex-col pt-[88px] h-full overflow-hidden">
-                <AiChat
-                    stepLabel={currentStep.label}
-                    scenarioData={project.scenario} // Pass live data context
-                    onApplyContent={(text) => updateCurrentValue(text)}
-                />
             </div>
-
-            {/* Overlay: Checklist */}
-            <Checklist
-                project={project}
-                isOpen={showChecklist}
-                onClose={() => setShowChecklist(false)}
-                onNavigateToStep={(stepId) => {
-                    const idx = STEPS.findIndex(s => s.id === stepId);
-                    if (idx !== -1) setCurrentStepIndex(idx);
-                    setShowChecklist(false);
-                }}
-            />
         </div>
     );
-}
+};
+
+export default ScenarioWizard;
